@@ -1,0 +1,122 @@
+<!--  -->
+<!-- Joseph Saponaro WebCam Face detection-->
+<!-- Requires a local server to operate correctly. I used the live html extension in VSCode-->
+<!--  -->
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+  <meta charset="UTF-8">  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+  <title>Webcam Face Detection with OpenCV.js - Joseph Saponaro</title>  
+  <style>  
+    body { font-family: Arial, sans-serif; margin: 20px; }  
+    #canvas_output { border: 1px solid #ccc; margin-top: 10px; }  
+    #status { margin-bottom: 10px; color: #555; }  
+    video { display: none; }  
+  </style>  
+</head>  
+<body>  
+  <h2>Webcam Face Detection</h2>  
+  <div id="status">Loading OpenCV.js...</div>  
+  <video id="cam_input" width="640" height="480" autoplay></video>  
+  <canvas id="canvas_output" width="640" height="480"></canvas>  
+    
+  <script>  
+    // Global variables  
+    let classifier;  
+    let video = document.getElementById('cam_input');  
+    let canvas = document.getElementById('canvas_output');  
+    let ctx = canvas.getContext('2d');  
+    let statusDiv = document.getElementById('status');  
+    let streaming = false;  
+      
+    // Initiliaze Opencv 
+    function openCvReady() {  
+      cv['onRuntimeInitialized'] = () => {  
+        statusDiv.innerHTML = 'OpenCV.js is ready. Loading face cascade...';  
+        let utils = new Utils();  
+        let cascadeFile = 'haarcascade_frontalface_default.xml';  
+        utils.createFileFromUrl(cascadeFile,  
+            'https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml',  
+            () => {  
+              classifier = new cv.CascadeClassifier();  
+              classifier.load(cascadeFile);  
+              statusDiv.innerHTML = 'Ready! Starting webcam...';  
+              startCamera();  
+            }  
+        );  
+      };  
+    }  
+      
+    // Start the webcam video  
+    function startCamera() {  
+      if (navigator.mediaDevices.getUserMedia) {  
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false })  
+        .then((stream) => {  
+          video.srcObject = stream;  
+          video.play();  
+          streaming = true;  
+          requestAnimationFrame(processVideo);  
+        })  
+        .catch((err) => {  
+          console.error("Error accessing webcam: " + err);  
+          statusDiv.innerHTML = "Error accessing webcam: " + err;  
+        });  
+      } else {  
+        alert("getUserMedia not supported!");  
+      }  
+    }  
+      
+    // Process frames in the video
+    function processVideo() {  
+      if (!streaming) return;  
+        
+      // Capture the video
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);  
+      let src = cv.imread(canvas);  
+      let gray = new cv.Mat();  
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);  
+        
+      // Detect the faces 
+      let faces = new cv.RectVector();  
+      classifier.detectMultiScale(gray, faces);  
+        
+      // Draw boxes 
+      for (let i = 0; i < faces.size(); i++) {  
+        let face = faces.get(i);  
+        let point1 = new cv.Point(face.x, face.y);  
+        let point2 = new cv.Point(face.x + face.width, face.y + face.height);  
+        cv.rectangle(src, point1, point2, [0, 255, 0, 255], 2);  
+      }  
+      cv.imshow('canvas_output', src);   
+      src.delete();  
+      gray.delete();  
+      faces.delete();  
+         
+      requestAnimationFrame(processVideo);  
+    }  
+      
+    // Load the cascade files 
+    class Utils {  
+      createFileFromUrl(path, url, callback) {  
+        let request = new XMLHttpRequest();  
+        request.open('GET', url, true);  
+        request.responseType = 'arraybuffer';  
+        request.onload = function() {  
+          if (request.status === 200) {  
+            let data = new Uint8Array(request.response);  
+            cv.FS_createDataFile('/', path, data, true, false, false);  
+            callback();  
+          } else {  
+            console.error('Failed to load ' + url);  
+          }  
+        };  
+        request.send();  
+      }  
+    }  
+      
+    // Load OpenCV.js  
+    </script>  
+    <script async src="https://docs.opencv.org/4.7.0/opencv.js" onload="openCvReady();"></script>  
+</body>  
+</html>  

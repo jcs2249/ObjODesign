@@ -1,0 +1,142 @@
+<!--  -->
+<!-- Joseph Saponaro Face and EYe detection -->
+<!-- Requires a local server to operate correctly -->
+<!--  -->
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+  <meta charset="UTF-8">  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+  <title>Face and Eye Detection from Image</title>  
+  <style>  
+    body {   
+      font-family: Arial, sans-serif;   
+      margin: 20px;   
+    }  
+    #canvas_output {   
+      border: 1px solid #ccc;   
+      margin-top: 10px;   
+    }  
+    #status {   
+      margin-bottom: 10px;   
+      color: #555;   
+    }  
+  </style>  
+</head>  
+<body>  
+  <h2>Joseph Saponaro Face/Eye Detection from Image</h2>  
+  <div id="status">Loading OpenCV.js...</div>  
+  <input type="file" id="fileInput" accept="image/*" disabled>  
+  <canvas id="canvas_output"></canvas>  
+  
+  <script>  
+    let faceClassifier, eyeClassifier;  
+    let canvas = document.getElementById('canvas_output');  
+    let ctx = canvas.getContext('2d');  
+    let statusDiv = document.getElementById('status');  
+    let fileInput = document.getElementById('fileInput');  
+  
+    // Function called when OpenCV.js is ready  
+    function openCvReady() {  
+      cv['onRuntimeInitialized'] = () => {  
+        statusDiv.innerHTML = 'OpenCV.js is ready. Loading cascade classifiers...';  
+        let utils = new Utils();  
+        // Load face cascade then eye cascade 
+        utils.createFileFromUrl('haarcascade_frontalface_default.xml',   
+          'https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml',  
+          () => {  
+            faceClassifier = new cv.CascadeClassifier();  
+            faceClassifier.load('haarcascade_frontalface_default.xml');  
+  
+            utils.createFileFromUrl('haarcascade_eye.xml',   
+              'https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_eye.xml',  
+              () => {  
+                eyeClassifier = new cv.CascadeClassifier();  
+                eyeClassifier.load('haarcascade_eye.xml');  
+  
+                statusDiv.innerHTML = 'Ready! Select an image.';  
+                fileInput.disabled = false;  
+              }  
+            );  
+          }  
+        );  
+      };  
+    }  
+  
+    // Process the selected image  
+    fileInput.addEventListener('change', function() {  
+      if (!this.files || !this.files[0]) return;  
+  
+      let reader = new FileReader();  
+      reader.onload = function(e) {  
+        let img = new Image();  
+        img.onload = function() {  
+          // match canvas with image  
+          canvas.width = img.width;  
+          canvas.height = img.height;  
+          ctx.drawImage(img, 0, 0);  
+  
+          // Convert canvas image to OpenCV compatible   
+          let src = cv.imread(canvas);  
+          let gray = new cv.Mat();  
+          cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);  
+  
+          // Detect faces in the image  
+          let faces = new cv.RectVector();  
+          faceClassifier.detectMultiScale(gray, faces, 1.1, 3);  
+          statusDiv.innerHTML = `Detected ${faces.size()} faces`;  
+  
+          for (let i = 0; i < faces.size(); i++) {  
+            let face = faces.get(i);  
+            let pt1 = new cv.Point(face.x, face.y);  
+            let pt2 = new cv.Point(face.x + face.width, face.y + face.height);  
+            cv.rectangle(src, pt1, pt2, [0, 255, 0, 255], 3);  
+  
+            // Focus in on the face for eye detection
+            let faceROI = gray.roi(face);  
+            let eyes = new cv.RectVector();  
+            eyeClassifier.detectMultiScale(faceROI, eyes, 1.1, 3);  
+            // Draw rectangles on eyes  
+            for (let j = 0; j < eyes.size(); j++) {  
+              let eye = eyes.get(j);  
+              let eyePt1 = new cv.Point(face.x + eye.x, face.y + eye.y);  
+              let eyePt2 = new cv.Point(face.x + eye.x + eye.width, face.y + eye.y + eye.height);  
+              cv.rectangle(src, eyePt1, eyePt2, [0, 0, 255, 255], 2);  
+            }  
+            faceROI.delete();  
+            eyes.delete();  
+          }  
+          cv.imshow('canvas_output', src);  
+          src.delete();  
+          gray.delete();  
+          faces.delete();  
+        }  
+        img.src = e.target.result;  
+      }  
+      reader.readAsDataURL(this.files[0]);  
+    });  
+  
+    // Utility class for loading cascade files  
+    class Utils {  
+      createFileFromUrl(path, url, callback) {  
+        let request = new XMLHttpRequest();  
+        request.open('GET', url, true);  
+        request.responseType = 'arraybuffer';  
+        request.onload = function() {  
+          if (request.status === 200) {  
+            let data = new Uint8Array(request.response);  
+            cv.FS_createDataFile('/', path, data, true, false, false);  
+            callback();  
+          } else {  
+            console.error('Failed to load ' + url);  
+          }  
+        };  
+        request.send();  
+      }  
+    }  
+  
+    // Load OpenCV.js  
+  </script>  
+  <script async src="https://docs.opencv.org/4.7.0/opencv.js" onload="openCvReady();"></script>  
+</body>  
+</html>  
